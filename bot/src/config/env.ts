@@ -8,7 +8,9 @@ export interface AppConfig {
   ownerId: number;
   archiveChannelId: string;
   logLevel: LogLevel;
+  port: number;
 }
+
 
 class ConfigError extends Error {}
 
