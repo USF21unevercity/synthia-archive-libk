@@ -25,6 +25,7 @@ export interface Application {
   pool: Database;
   poller: UpdatePoller;
   telegram: TelegramClient;
+  health: ReturnType<typeof createHealthServer>;
 }
 
 /** Composition root: every dependency is constructed and injected here. */
@@ -34,6 +35,7 @@ export async function createApplication(): Promise<Application> {
   const pool = createPool(config.databaseUrl, logger.child("db"));
 
   await runMigrations(pool, logger.child("migrate"));
+
 
   const channels = new ChannelRepository(pool);
   const admins = new AdminRepository(pool);
