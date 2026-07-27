@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type Server, type ServerResponse } from "node:http";
 import type { Database } from "../infrastructure/db/pool.js";
 import type { TelegramClient } from "../telegram/client.js";
 import type { Logger } from "../core/logger.js";
@@ -42,7 +42,7 @@ export function createHealthServer(deps: HealthDependencies): {
   listen: () => Promise<void>;
   close: () => Promise<void>;
 } {
-  const json = (res: Parameters<Parameters<typeof createServer>[1]>[1], status: number, body: unknown) => {
+  const json = (res: ServerResponse, status: number, body: unknown) => {
     const payload = JSON.stringify(body);
     res.writeHead(status, {
       "Content-Type": "application/json; charset=utf-8",
