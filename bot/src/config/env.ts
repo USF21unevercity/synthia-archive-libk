@@ -8,7 +8,9 @@ export interface AppConfig {
   ownerId: number;
   archiveChannelId: string;
   logLevel: LogLevel;
+  port: number;
 }
+
 
 class ConfigError extends Error {}
 
@@ -42,13 +44,21 @@ export function loadConfig(): AppConfig {
     throw new ConfigError(`LOG_LEVEL must be one of error|warn|info|debug, received: ${logLevel}`);
   }
 
+  const portRaw = optional("PORT", "8080");
+  const port = Number.parseInt(portRaw, 10);
+  if (!Number.isSafeInteger(port) || port <= 0 || port > 65535) {
+    throw new ConfigError(`PORT must be a valid TCP port, received: ${portRaw}`);
+  }
+
   cached = {
     botToken: required("BOT_TOKEN"),
     databaseUrl: required("DATABASE_URL"),
     ownerId,
     archiveChannelId: required("ARCHIVE_CHANNEL_ID"),
     logLevel,
+    port,
   };
+
 
   return cached;
 }

@@ -1,88 +1,63 @@
-# منصة الأرشفة العلمية عبر تليجرام
+# SciTelegram Platform — Backend (Bot)
 
-Enterprise-grade Telegram platform for archiving, classifying and searching scientific
-content published in Telegram channels.
+Standalone Node.js 20 service. Clean Architecture, external PostgreSQL only
+(Neon-ready). Deployable to Docker, Render, Oracle Cloud or any VPS.
 
-## Architecture (Clean Architecture)
+## Layers
 
-```text
+```
 src/
-  config/          environment-only configuration (nothing hardcoded)
-  core/            logger, error hierarchy
-  domain/          entities and value types
-  infrastructure/
-    db/            PostgreSQL pool, migrator, SQL migrations
-    repositories/  Repository Pattern (data access only)
-  services/        business logic (permissions, extraction, archive, search, stats)
-  telegram/        Telegram Bot API client, long-poller, handlers (no business logic)
-  app.ts           composition root / dependency injection
-  index.ts         process bootstrap, graceful shutdown, global error handlers
+  config/          environment loading + validation (nothing hardcoded)
+  core/            logger (auto-redacts secrets), typed errors
+  domain/          entities and business types
+  infrastructure/  db pool, migrator, SQL migrations, repositories
+  services/        business logic (archive, search, stats, permissions, extraction)
+  telegram/        API client, long-poll runner, handlers/dispatcher
+  http/            health / readiness / metrics HTTP server
+  scripts/         verify.ts pre-flight checks
+  app.ts           composition root (dependency injection)
 ```
 
-## Modules
-
-| # | Module | Status |
-|---|--------|--------|
-| 1 | Telegram Core | implemented |
-| 2 | Channel Management | implemented |
-| 3 | Administrator Management | implemented |
-| 4 | Permission System (RBAC) | implemented |
-| 5 | Scientific File Management | implemented |
-| 6 | Archive System | implemented |
-| 7 | Search Engine | implemented |
-| 8 | Scientific Indexing | implemented (GIN full-text) |
-| 9 | Hashtag Management | implemented (extract + generate) |
-| 10 | Statistics | implemented |
-| 11 | Reports (PDF/Excel) | next step |
-| 12 | Settings | implemented |
-| 13 | Activity Logs | implemented |
-
-## Requirements
-
-- Node.js 20+
-- External PostgreSQL (Neon, Supabase PostgreSQL, or self-hosted). The Lovable built-in
-  database is not used anywhere.
-
-## Environment variables
-
-Copy `.env.example` to `.env`:
-
-| Variable | Description |
-|----------|-------------|
-| `BOT_TOKEN` | Telegram bot token from @BotFather |
-| `DATABASE_URL` | External PostgreSQL connection string |
-| `OWNER_ID` | Numeric Telegram id of the owner (permanent full access) |
-| `ARCHIVE_CHANNEL_ID` | Default archive channel id |
-| `LOG_LEVEL` | `error` \| `warn` \| `info` \| `debug` |
-
-## Run locally
+## Setup
 
 ```bash
 cd bot
+cp .env.example .env      # fill BOT_TOKEN, DATABASE_URL, OWNER_ID, ARCHIVE_CHANNEL_ID
 npm install
-cp .env.example .env    # fill in the values
-npm run migrate
-npm run dev
+npm run migrate           # create all tables on the external PostgreSQL
+npm run verify            # checks config + PostgreSQL + schema + Telegram
+npm run dev               # or: npm run build && npm start
 ```
 
-## Deploy
+`DATABASE_URL` for Neon must include `?sslmode=require`. SSL is enabled
+automatically for every non-localhost host.
 
-- **Docker**: `docker build -t sci-bot ./bot && docker run --env-file bot/.env sci-bot`
-- **Render**: `bot/render.yaml` defines a background worker; set the env vars in the dashboard.
-- **Oracle Cloud / any VM**: `npm ci && npm run build && npm start` under systemd or Docker.
+## Operational endpoints
 
-Migrations run automatically at startup, so deployment requires no code changes.
+| Endpoint   | Purpose                                            |
+| ---------- | -------------------------------------------------- |
+| `/health`  | liveness — 200 while the process is alive           |
+| `/ready`   | readiness — 200 only if PostgreSQL **and** Telegram respond, else 503 |
+| `/metrics` | uptime, memory, PostgreSQL pool counters            |
 
-## Bot commands
+Port comes from `PORT` (default `8080`), so Render/Oracle probes work as-is.
 
-`/start` `/help` `/addchannel` `/channels` `/setarchive` `/channelstatus`
-`/addadmin` `/admins` `/assign` `/search` `/stats` `/tags` `/logs` `/settings`
+## Migrations
 
-Search supports filters: `/search فيزياء type:pdf tag:محاضرة from:2024-01-01 channel:3`
+Plain SQL files in `src/infrastructure/db/migrations`, applied in filename
+order inside a transaction and recorded in `schema_migrations`. Add a new
+feature by dropping in `002_*.sql`; never edit an applied migration.
 
-## Guarantees
+Current schema (10 tables): `channels`, `admins`, `admin_channels`, `files`,
+`archive_logs`, `hashtags`, `file_hashtags`, `settings`, `activity_logs`,
+`schema_migrations`, with GIN full-text search over file metadata and a
+unique index preventing duplicate Telegram files.
 
-- Duplicate protection on `(channel_id, message_id)` and on `telegram_file_unique_id`.
-- Every command is validated before it reaches the service layer.
-- `BOT_TOKEN` / `DATABASE_URL` are never logged (logger redacts them).
-- Global error handling: failed updates are logged, the poller keeps running.
+## Deployment
+
+- **Docker**: `docker build -t scibot ./bot && docker run --env-file bot/.env -p 8080:8080 scibot`
+- **Render**: `bot/render.yaml` (web service, health check path `/health`)
+- **Oracle Cloud / VPS**: same image, or `npm ci && npm run build && npm start`
+
+Migrations run automatically at boot, so a fresh deploy against an empty Neon
+database is self-provisioning.

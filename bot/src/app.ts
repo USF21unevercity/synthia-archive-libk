@@ -18,6 +18,8 @@ import { TelegramClient } from "./telegram/client.js";
 import { UpdatePoller } from "./telegram/poller.js";
 import { UpdateDispatcher } from "./telegram/handlers/dispatcher.js";
 import { buildCommands } from "./telegram/handlers/commands.js";
+import { createHealthServer } from "./http/health-server.js";
+
 
 export interface Application {
   config: AppConfig;
@@ -25,6 +27,7 @@ export interface Application {
   pool: Database;
   poller: UpdatePoller;
   telegram: TelegramClient;
+  health: ReturnType<typeof createHealthServer>;
 }
 
 /** Composition root: every dependency is constructed and injected here. */
@@ -34,6 +37,7 @@ export async function createApplication(): Promise<Application> {
   const pool = createPool(config.databaseUrl, logger.child("db"));
 
   await runMigrations(pool, logger.child("migrate"));
+
 
   const channels = new ChannelRepository(pool);
   const admins = new AdminRepository(pool);
@@ -89,5 +93,15 @@ export async function createApplication(): Promise<Application> {
   // Owner always exists and can never be removed.
   await admins.upsert({ telegramUserId: String(config.ownerId), role: "owner" });
 
-  return { config, logger, pool, poller, telegram };
+  const health = createHealthServer({
+    pool,
+    telegram,
+    logger: logger.child("http"),
+    port: config.port,
+    startedAt: Date.now(),
+    version: "0.1.0",
+  });
+
+  return { config, logger, pool, poller, telegram, health };
 }
+
