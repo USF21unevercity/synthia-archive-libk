@@ -18,6 +18,8 @@ import { TelegramClient } from "./telegram/client.js";
 import { UpdatePoller } from "./telegram/poller.js";
 import { UpdateDispatcher } from "./telegram/handlers/dispatcher.js";
 import { buildCommands } from "./telegram/handlers/commands.js";
+import { createHealthServer } from "./http/health-server.js";
+
 
 export interface Application {
   config: AppConfig;
