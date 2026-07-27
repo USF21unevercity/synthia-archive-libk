@@ -9,15 +9,19 @@ async function main(): Promise<void> {
   const me = await app.telegram.getMe();
   app.logger.info("Bot authenticated", { username: me.username, id: me.id });
 
+  await app.health.listen();
+
   const shutdown = async (signal: string) => {
     app.logger.info("Shutting down", { signal });
     app.poller.stop();
+    await app.health.close().catch(() => undefined);
     await app.pool.end().catch(() => undefined);
     process.exit(0);
   };
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
 
   // Global safety net: the process must never die on an unhandled failure.
   process.on("unhandledRejection", (reason) => {
