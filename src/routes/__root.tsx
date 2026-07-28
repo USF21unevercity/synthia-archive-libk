@@ -80,6 +80,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "author", content: "منصة الأرشفة العلمية" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { title: "منصة الأرشفة العلمية | إدارة قنوات تليجرام التعليمية" },
+      { property: "og:title", content: "منصة الأرشفة العلمية | إدارة قنوات تليجرام التعليمية" },
+      { name: "twitter:title", content: "منصة الأرشفة العلمية | إدارة قنوات تليجرام التعليمية" },
+      { name: "description", content: "منصة متكاملة لأرشفة وتصنيف والبحث في المحتوى العلمي المنشور في قنوات تليجرام، مبنية على PostgreSQL خارجية وبنية معمارية نظيفة." },
+      { property: "og:description", content: "منصة متكاملة لأرشفة وتصنيف والبحث في المحتوى العلمي المنشور في قنوات تليجرام، مبنية على PostgreSQL خارجية وبنية معمارية نظيفة." },
+      { name: "twitter:description", content: "منصة متكاملة لأرشفة وتصنيف والبحث في المحتوى العلمي المنشور في قنوات تليجرام، مبنية على PostgreSQL خارجية وبنية معمارية نظيفة." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/01ace3d6-d4af-4aed-9f8c-c0ae8888eff3" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/01ace3d6-d4af-4aed-9f8c-c0ae8888eff3" },
     ],
     links: [
       {
