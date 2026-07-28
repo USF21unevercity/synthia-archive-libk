@@ -54,7 +54,8 @@ export function loadConfig(): AppConfig {
     botToken: required("BOT_TOKEN"),
     databaseUrl: required("DATABASE_URL"),
     ownerId,
-    archiveChannelId: required("ARCHIVE_CHANNEL_ID"),
+    // Optional: when empty, archiving is deferred until a channel is configured.
+    archiveChannelId: optional("ARCHIVE_CHANNEL_ID", ""),
     logLevel,
     port,
   };

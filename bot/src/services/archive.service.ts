@@ -67,27 +67,38 @@ export class ArchiveService {
     await this.hashtags.attach(file.id, content.hashtags);
 
     const archiveChannelId = channel.archiveChannelId ?? this.defaultArchiveChannelId;
-    try {
-      const copied = await this.telegram.copyMessage(
-        archiveChannelId,
-        telegramChannelId,
-        message.message_id,
-      );
+    if (!archiveChannelId) {
+      // No archive target configured yet: keep metadata, defer the copy.
       await this.archive.record({
         fileId: file.id,
-        archiveChannelId,
-        archiveMessageId: copied.message_id,
-        status: "archived",
+        archiveChannelId: "",
+        status: "pending",
+        errorMessage: "No archive channel configured",
       });
-    } catch (error) {
-      const appError = toAppError(error);
-      await this.archive.record({
-        fileId: file.id,
-        archiveChannelId,
-        status: "failed",
-        errorMessage: appError.message,
-      });
-      this.logger.error("Archiving failed", { fileId: file.id, error: appError.message });
+      this.logger.info("Archiving deferred — no archive channel configured", { fileId: file.id });
+    } else {
+      try {
+        const copied = await this.telegram.copyMessage(
+          archiveChannelId,
+          telegramChannelId,
+          message.message_id,
+        );
+        await this.archive.record({
+          fileId: file.id,
+          archiveChannelId,
+          archiveMessageId: copied.message_id,
+          status: "archived",
+        });
+      } catch (error) {
+        const appError = toAppError(error);
+        await this.archive.record({
+          fileId: file.id,
+          archiveChannelId,
+          status: "failed",
+          errorMessage: appError.message,
+        });
+        this.logger.error("Archiving failed", { fileId: file.id, error: appError.message });
+      }
     }
 
     await this.activity.record({
