@@ -2,17 +2,17 @@ services:
   - type: web
     name: sci-telegram-bot
     runtime: docker
-    repo: # optional — set in Render UI
     dockerfilePath: ./bot/Dockerfile
     dockerContext: ./bot
     plan: starter
+    region: frankfurt
     autoDeploy: true
     healthCheckPath: /health
     envVars:
       # Telegram bot token from @BotFather
       - key: BOT_TOKEN
         sync: false
-      # External PostgreSQL (Neon) connection string, must include ?sslmode=require
+      # External PostgreSQL (Neon), must include ?sslmode=require
       - key: DATABASE_URL
         sync: false
       # Numeric Telegram user id of the platform owner
