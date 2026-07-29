@@ -56,8 +56,11 @@ unique index preventing duplicate Telegram files.
 ## Deployment
 
 - **Docker**: `docker build -t scibot ./bot && docker run --env-file bot/.env -p 8080:8080 scibot`
-- **Render**: `bot/render.yaml` (web service, health check path `/health`)
+- **Render**: blueprint at repo root `render.yaml` (Docker web service, context `./bot`,
+  health check path `/health`). Required env vars: `BOT_TOKEN`, `DATABASE_URL`,
+  `OWNER_ID`; optional: `ARCHIVE_CHANNEL_ID`, `LOG_LEVEL`, `PORT`, `PG_POOL_MAX`.
 - **Oracle Cloud / VPS**: same image, or `npm ci && npm run build && npm start`
+
 
 Migrations run automatically at boot, so a fresh deploy against an empty Neon
 database is self-provisioning.
