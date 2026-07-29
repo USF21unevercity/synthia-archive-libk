@@ -1,21 +1,31 @@
 services:
   - type: web
     name: sci-telegram-bot
-    env: docker
+    runtime: docker
     dockerfilePath: ./bot/Dockerfile
     dockerContext: ./bot
     plan: starter
+    region: frankfurt
+    autoDeploy: true
     healthCheckPath: /health
     envVars:
+      # Telegram bot token from @BotFather
       - key: BOT_TOKEN
         sync: false
+      # External PostgreSQL (Neon), must include ?sslmode=require
       - key: DATABASE_URL
         sync: false
+      # Numeric Telegram user id of the platform owner
       - key: OWNER_ID
         sync: false
+      # Optional: default archive channel id (e.g. -1001234567890)
       - key: ARCHIVE_CHANNEL_ID
         sync: false
       - key: LOG_LEVEL
         value: info
       - key: PORT
-        value: 8080
+        value: "8080"
+      - key: PG_POOL_MAX
+        value: "10"
+      - key: NODE_ENV
+        value: production

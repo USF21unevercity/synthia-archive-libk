@@ -1,7 +1,7 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
@@ -11,9 +11,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
-COPY src/infrastructure/db/migrations ./dist/infrastructure/db/migrations
 EXPOSE 8080
 USER node
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
