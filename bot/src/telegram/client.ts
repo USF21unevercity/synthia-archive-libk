@@ -45,6 +45,7 @@ export interface TelegramUpdate {
   edited_message?: TelegramMessage;
   channel_post?: TelegramMessage;
   edited_channel_post?: TelegramMessage;
+  callback_query?: TelegramCallbackQuery;
 }
 
 export interface TelegramWebhookInfo {
@@ -57,6 +58,21 @@ export interface TelegramWebhookInfo {
   allowed_updates?: string[];
 }
 
+export interface InlineKeyboardButton {
+  text: string;
+  callback_data: string;
+}
+
+export interface InlineKeyboardMarkup {
+  inline_keyboard: InlineKeyboardButton[][];
+}
+
+export interface TelegramCallbackQuery {
+  id: string;
+  from: TelegramUser;
+  message?: TelegramMessage;
+  data?: string;
+}
 /** Thin, dependency-free Telegram Bot API client. The token never leaves this module. */
 export class TelegramClient {
   private readonly baseUrl: string;
@@ -139,8 +155,12 @@ export class TelegramClient {
     return this.call<TelegramUpdate[]>("getUpdates", {
       offset,
       timeout,
-      allowed_updates: ["message", "channel_post", "edited_channel_post"],
-    });
+      allowed_updates: [
+  "message",
+  "channel_post",
+  "edited_channel_post",
+  "callback_query",
+],
   }
 
   deleteWebhook(dropPendingUpdates = false) {
