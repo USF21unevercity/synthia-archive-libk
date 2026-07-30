@@ -2,9 +2,26 @@ import type { LogLevel } from "../config/env.js";
 
 const LEVELS: Record<LogLevel, number> = { error: 0, warn: 1, info: 2, debug: 3 };
 
-const REDACTED_KEYS = ["bot_token", "bottoken", "token", "database_url", "databaseurl", "password"];
+const REDACTED_KEYS = [
+  "bot_token",
+  "bottoken",
+  "token",
+  "database_url",
+  "databaseurl",
+  "password",
+  "authorization",
+  "cookie",
+  "secret",
+];
 
 function redact(value: unknown): unknown {
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+    };
+  }
   if (typeof value === "string") return value;
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};

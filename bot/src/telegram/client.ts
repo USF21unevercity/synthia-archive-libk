@@ -1,5 +1,6 @@
 import { TelegramApiError } from "../core/errors.js";
 import type { Logger } from "../core/logger.js";
+import { isNetworkLikeError, withRetry } from "../core/retry.js";
 
 export interface TelegramUser {
   id: number;
@@ -46,9 +47,20 @@ export interface TelegramUpdate {
   edited_channel_post?: TelegramMessage;
 }
 
+export interface TelegramWebhookInfo {
+  url: string;
+  has_custom_certificate: boolean;
+  pending_update_count: number;
+  last_error_date?: number;
+  last_error_message?: string;
+  max_connections?: number;
+  allowed_updates?: string[];
+}
+
 /** Thin, dependency-free Telegram Bot API client. The token never leaves this module. */
 export class TelegramClient {
   private readonly baseUrl: string;
+  private readonly timeoutMs = 40_000;
 
   constructor(
     token: string,
@@ -58,22 +70,47 @@ export class TelegramClient {
   }
 
   async call<T>(method: string, payload: Record<string, unknown> = {}): Promise<T> {
-    const response = await fetch(`${this.baseUrl}/${method}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+    return withRetry(() => this.callOnce<T>(method, payload), {
+      attempts: 3,
+      initialDelayMs: 500,
+      maxDelayMs: 5_000,
+      shouldRetry: (error) => isRetryableTelegramError(error),
+      onRetry: (error, attempt, delayMs) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn("Retrying Telegram API call", { method, attempt, delayMs, error: message });
+      },
     });
+  }
 
-    const body = (await response.json()) as { ok: boolean; result?: T; description?: string; error_code?: number };
-    if (!response.ok || !body.ok) {
-      this.logger.error("Telegram API call failed", {
-        method,
-        status: response.status,
-        description: body.description,
+  private async callOnce<T>(method: string, payload: Record<string, unknown>): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/${method}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
       });
-      throw new TelegramApiError(method, body.description ?? `HTTP ${response.status}`, body.error_code);
+
+      const body = (await response.json().catch(() => ({
+        ok: false,
+        description: `HTTP ${response.status}`,
+      }))) as { ok: boolean; result?: T; description?: string; error_code?: number };
+
+      if (!response.ok || !body.ok) {
+        this.logger.error("Telegram API call failed", {
+          method,
+          status: response.status,
+          description: body.description,
+        });
+        throw new TelegramApiError(method, body.description ?? `HTTP ${response.status}`, body.error_code);
+      }
+      return body.result as T;
+    } finally {
+      clearTimeout(timeout);
     }
-    return body.result as T;
   }
 
   getMe() {
@@ -105,4 +142,19 @@ export class TelegramClient {
       allowed_updates: ["message", "channel_post", "edited_channel_post"],
     });
   }
+
+  deleteWebhook(dropPendingUpdates = false) {
+    return this.call<boolean>("deleteWebhook", { drop_pending_updates: dropPendingUpdates });
+  }
+
+  getWebhookInfo() {
+    return this.call<TelegramWebhookInfo>("getWebhookInfo");
+  }
+}
+
+function isRetryableTelegramError(error: unknown): boolean {
+  if (isNetworkLikeError(error)) return true;
+  if (!(error instanceof TelegramApiError)) return false;
+  if (error.errorCode === 429 || (error.errorCode && error.errorCode >= 500)) return true;
+  return false;
 }

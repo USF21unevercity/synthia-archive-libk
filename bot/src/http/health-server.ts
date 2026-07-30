@@ -22,7 +22,12 @@ interface CheckResult {
 async function timed(fn: () => Promise<unknown>): Promise<CheckResult> {
   const start = Date.now();
   try {
-    await fn();
+    await Promise.race([
+      fn(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("health check timed out")), 10_000);
+      }),
+    ]);
     return { status: "up", latencyMs: Date.now() - start };
   } catch (error) {
     return { status: "down", latencyMs: Date.now() - start, detail: toAppError(error).message };
@@ -73,16 +78,26 @@ export function createHealthServer(deps: HealthDependencies): {
 
     if (url === "/ready") {
       void (async () => {
-        const [database, telegram] = await Promise.all([
-          timed(() => deps.pool.query("SELECT 1")),
-          timed(() => deps.telegram.getMe()),
-        ]);
-        const healthy = database.status === "up" && telegram.status === "up";
-        json(res, healthy ? 200 : 503, {
-          status: healthy ? "ready" : "degraded",
-          checks: { database, telegram },
-          timestamp: new Date().toISOString(),
-        });
+        try {
+          const [database, telegram] = await Promise.all([
+            timed(() => deps.pool.query("SELECT 1")),
+            timed(() => deps.telegram.getMe()),
+          ]);
+          const healthy = database.status === "up" && telegram.status === "up";
+          json(res, healthy ? 200 : 503, {
+            status: healthy ? "ready" : "degraded",
+            checks: { database, telegram },
+            timestamp: new Date().toISOString(),
+          });
+        } catch (error) {
+          const appError = toAppError(error);
+          deps.logger.error("Readiness check failed unexpectedly", { error: appError.message });
+          json(res, 503, {
+            status: "degraded",
+            checks: { runtime: { status: "down", latencyMs: 0, detail: appError.message } },
+            timestamp: new Date().toISOString(),
+          });
+        }
       })();
       return;
     }
@@ -112,8 +127,10 @@ export function createHealthServer(deps: HealthDependencies): {
     server,
     listen: () =>
       new Promise<void>((resolve, reject) => {
-        server.once("error", reject);
+        const onError = (error: Error) => reject(error);
+        server.once("error", onError);
         server.listen(deps.port, "0.0.0.0", () => {
+          server.off("error", onError);
           deps.logger.info("Health server listening", { port: deps.port });
           resolve();
         });

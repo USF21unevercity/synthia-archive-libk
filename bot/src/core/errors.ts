@@ -43,11 +43,18 @@ export class ConflictError extends AppError {
 }
 
 export class TelegramApiError extends AppError {
+  readonly method: string;
+  readonly description: string;
+  readonly errorCode?: number;
+
   constructor(method: string, description: string, errorCode?: number) {
     super("TELEGRAM_API_ERROR", "تعذر تنفيذ الطلب عبر تليجرام.", `${method}: ${description}`, {
       method,
       errorCode,
     });
+    this.method = method;
+    this.description = description;
+    this.errorCode = errorCode;
   }
 }
 

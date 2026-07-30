@@ -1,5 +1,5 @@
 import type { Logger } from "../core/logger.js";
-import { toAppError } from "../core/errors.js";
+import { TelegramApiError, toAppError } from "../core/errors.js";
 import type { TelegramClient, TelegramUpdate } from "./client.js";
 
 export type UpdateHandler = (update: TelegramUpdate) => Promise<void>;
@@ -24,6 +24,11 @@ export class UpdatePoller {
   }
 
   async start(): Promise<void> {
+    if (this.running) {
+      this.logger.warn("Update poller already running");
+      return;
+    }
+
     this.running = true;
     this.logger.info("Update poller started");
 
@@ -47,6 +52,7 @@ export class UpdatePoller {
         }
       } catch (error) {
         const appError = toAppError(error);
+        await this.recoverPollingMode(error);
         this.logger.error("Polling failed, backing off", {
           code: appError.code,
           error: appError.message,
@@ -58,5 +64,20 @@ export class UpdatePoller {
     }
 
     this.logger.info("Update poller stopped");
+  }
+
+  private async recoverPollingMode(error: unknown): Promise<void> {
+    if (!(error instanceof TelegramApiError)) return;
+    if (error.method !== "getUpdates") return;
+    if (!error.description.toLowerCase().includes("webhook")) return;
+
+    try {
+      this.logger.warn("Telegram webhook is blocking polling; deleting webhook without dropping updates");
+      await this.client.deleteWebhook(false);
+      this.backoffMs = 1_000;
+    } catch (deleteError) {
+      const appError = toAppError(deleteError);
+      this.logger.error("Failed to delete blocking Telegram webhook", { error: appError.message });
+    }
   }
 }
