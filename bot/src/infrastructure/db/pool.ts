@@ -44,15 +44,17 @@ export function createPool(databaseUrl: string, logger: Logger): Database {
       onRetry,
     });
 
-  const originalConnect = pool.connect.bind(pool) as () => Promise<pg.PoolClient>;
-  (pool as unknown as { connect: () => Promise<pg.PoolClient> }).connect = () =>
-    withRetry(() => originalConnect(), {
+  const originalConnect = pool.connect.bind(pool) as (...args: unknown[]) => unknown;
+  (pool as unknown as { connect: (...args: unknown[]) => unknown }).connect = (...args) => {
+    if (args.length > 0) return originalConnect(...args);
+    return withRetry(() => originalConnect() as Promise<pg.PoolClient>, {
       attempts: 3,
       initialDelayMs: 300,
       maxDelayMs: 2_000,
       shouldRetry: retryable,
       onRetry,
     });
+  };
 
   return pool;
 }
