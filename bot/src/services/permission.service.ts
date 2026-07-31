@@ -33,6 +33,8 @@ export interface Actor {
   role: AdminRole;
   adminId: number | null;
   isOwner: boolean;
+  /** True for public users that are not registered staff (students). */
+  isStudent: boolean;
 }
 
 /** RBAC. The owner is resolved from OWNER_ID and can never lose access. */
@@ -45,7 +47,7 @@ export class PermissionService {
   async resolve(telegramUserId: string): Promise<Actor | null> {
     if (telegramUserId === String(this.ownerId)) {
       const owner = await this.admins.upsert({ telegramUserId, role: "owner" });
-      return { telegramUserId, role: "owner", adminId: owner.id, isOwner: true };
+      return { telegramUserId, role: "owner", adminId: owner.id, isOwner: true, isStudent: false };
     }
 
     const admin: Admin | null = await this.admins.findByTelegramId(telegramUserId);
@@ -55,7 +57,15 @@ export class PermissionService {
       role: admin.role,
       adminId: admin.id,
       isOwner: false,
+      isStudent: false,
     };
+  }
+
+  /** Never returns null: unknown users become read-only students. */
+  async resolveOrStudent(telegramUserId: string): Promise<Actor> {
+    const actor = await this.resolve(telegramUserId);
+    if (actor) return actor;
+    return { telegramUserId, role: "viewer", adminId: null, isOwner: false, isStudent: true };
   }
 
   can(actor: Actor, capability: Capability): boolean {
