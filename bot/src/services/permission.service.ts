@@ -1,4 +1,5 @@
 import type { AdminRepository } from "../infrastructure/repositories/admin.repository.js";
+import type { UserRepository } from "../infrastructure/repositories/user.repository.js";
 import type { Admin, AdminRole } from "../domain/models.js";
 import { PermissionError } from "../core/errors.js";
 
@@ -33,6 +34,8 @@ export interface Actor {
   role: AdminRole;
   adminId: number | null;
   isOwner: boolean;
+  /** True for public users that are not registered staff (students). */
+  isStudent: boolean;
 }
 
 /** RBAC. The owner is resolved from OWNER_ID and can never lose access. */
@@ -40,12 +43,13 @@ export class PermissionService {
   constructor(
     private readonly admins: AdminRepository,
     private readonly ownerId: number,
+    private readonly users?: UserRepository,
   ) {}
 
   async resolve(telegramUserId: string): Promise<Actor | null> {
     if (telegramUserId === String(this.ownerId)) {
       const owner = await this.admins.upsert({ telegramUserId, role: "owner" });
-      return { telegramUserId, role: "owner", adminId: owner.id, isOwner: true };
+      return { telegramUserId, role: "owner", adminId: owner.id, isOwner: true, isStudent: false };
     }
 
     const admin: Admin | null = await this.admins.findByTelegramId(telegramUserId);
@@ -55,7 +59,26 @@ export class PermissionService {
       role: admin.role,
       adminId: admin.id,
       isOwner: false,
+      isStudent: false,
     };
+  }
+
+  /** Never returns null: unknown users become read-only students. */
+  async resolveOrStudent(
+    telegramUserId: string,
+    profile?: { first_name?: string; last_name?: string; username?: string },
+  ): Promise<Actor> {
+    if (this.users) {
+      const fullName = profile
+        ? [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || undefined
+        : undefined;
+      await this.users
+        .touch({ telegramUserId, fullName, username: profile?.username })
+        .catch(() => undefined);
+    }
+    const actor = await this.resolve(telegramUserId);
+    if (actor) return actor;
+    return { telegramUserId, role: "viewer", adminId: null, isOwner: false, isStudent: true };
   }
 
   can(actor: Actor, capability: Capability): boolean {

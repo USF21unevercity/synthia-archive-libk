@@ -174,4 +174,48 @@ export class FileRepository {
     );
     return Number(rows[0]?.count ?? 0);
   }
+
+  async latest(limit = 10, channelIds?: number[]): Promise<ScientificFile[]> {
+    const useFilter = Array.isArray(channelIds) && channelIds.length > 0;
+    const { rows } = await this.pool.query<FileRow>(
+      `SELECT * FROM files
+       ${useFilter ? "WHERE channel_id = ANY($2::bigint[])" : ""}
+       ORDER BY published_at DESC LIMIT $1`,
+      useFilter ? [Math.min(limit, 50), channelIds] : [Math.min(limit, 50)],
+    );
+    return rows.map(map);
+  }
+
+  async findByIds(ids: number[]): Promise<ScientificFile[]> {
+    if (!ids.length) return [];
+    const { rows } = await this.pool.query<FileRow>(
+      "SELECT * FROM files WHERE id = ANY($1::bigint[])",
+      [ids],
+    );
+    return rows.map(map);
+  }
+
+  async distinctValues(field: "subject" | "category", limit = 40): Promise<
+    Array<{ value: string; total: number }>
+  > {
+    const column = field === "subject" ? "subject" : "category";
+    const { rows } = await this.pool.query<{ value: string; total: string }>(
+      `SELECT ${column} AS value, COUNT(*) AS total
+         FROM files
+        WHERE ${column} IS NOT NULL AND ${column} <> ''
+        GROUP BY ${column}
+        ORDER BY total DESC, value
+        LIMIT $1`,
+      [Math.min(limit, 100)],
+    );
+    return rows.map((r) => ({ value: r.value, total: Number(r.total) }));
+  }
+
+  async countByChannel(): Promise<Array<{ channelId: number; total: number }>> {
+    const { rows } = await this.pool.query<{ channel_id: string; total: string }>(
+      "SELECT channel_id, COUNT(*) AS total FROM files GROUP BY channel_id ORDER BY total DESC",
+    );
+    return rows.map((r) => ({ channelId: Number(r.channel_id), total: Number(r.total) }));
+  }
 }
+

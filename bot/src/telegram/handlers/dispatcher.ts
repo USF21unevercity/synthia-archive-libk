@@ -5,13 +5,15 @@ import type { ArchiveService } from "../../services/archive.service.js";
 import type { ActivityLogRepository } from "../../infrastructure/repositories/activity-log.repository.js";
 import type { TelegramClient, TelegramUpdate } from "../client.js";
 import type { CommandDefinition } from "./types.js";
+import type { MenuController } from "./ui.js";
 
 /**
  * Module 1 — Telegram Core.
- * Routes updates to channel archiving or to a command; contains no business logic itself.
+ * Routes callback queries, inline keyboard inputs, channel posts, and text commands.
  */
 export class UpdateDispatcher {
   private readonly commands: Map<string, CommandDefinition>;
+  private ui: MenuController | null = null;
 
   constructor(
     commands: CommandDefinition[],
@@ -24,6 +26,10 @@ export class UpdateDispatcher {
     this.commands = new Map(commands.map((c) => [c.name, c]));
   }
 
+  setMenuController(ui: MenuController): void {
+    this.ui = ui;
+  }
+
   async dispatch(update: TelegramUpdate): Promise<void> {
     const channelPost = update.channel_post ?? update.edited_channel_post;
     if (channelPost) {
@@ -31,10 +37,36 @@ export class UpdateDispatcher {
       return;
     }
 
-    const message = update.message;
-    if (!message?.from || !message.text) return;
+    const query = update.callback_query;
+    if (query?.from) {
+      const actor = await this.permissions.resolveOrStudent(String(query.from.id), query.from);
+      if (this.ui) {
+        await this.ui.handleCallback(query, actor);
+      } else {
+        await this.telegram.answerCallbackQuery(query.id);
+      }
+      return;
+    }
 
-    const text = message.text.trim();
+    const message = update.message;
+    if (!message?.from) return;
+
+    const actor = await this.permissions.resolveOrStudent(String(message.from.id), message.from);
+
+    if (this.ui && (await this.ui.handlePendingMessage(message, actor))) {
+      return;
+    }
+
+    const text = (message.text ?? "").trim();
+    if (text === "/start" || text === "/menu" || text === "القائمة الرئيسية" || text === "القائمة") {
+      if (this.ui) {
+        await this.ui.showMenu(message.chat.id, actor);
+      } else {
+        await this.telegram.sendMessage(message.chat.id, "جاري إعداد القائمة الرئيسية...");
+      }
+      return;
+    }
+
     if (!text.startsWith("/")) return;
 
     const [rawCommand, ...rest] = text.split(/\s+/);
@@ -47,13 +79,12 @@ export class UpdateDispatcher {
       return;
     }
 
-    const actor = await this.permissions.resolve(String(message.from.id));
-    if (!actor) {
+    if (actor.isStudent && !["start", "menu", "help", "search"].includes(name)) {
       this.logger.warn("Unauthorized command attempt", {
         userId: message.from.id,
         command: name,
       });
-      await reply("غير مصرح لك باستخدام هذه المنصة.");
+      await reply("غير مصرح لك باستخدام هذا الأمر. أرسل /start لعرض القائمة.");
       return;
     }
 

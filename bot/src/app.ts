@@ -18,6 +18,10 @@ import { TelegramClient } from "./telegram/client.js";
 import { UpdatePoller } from "./telegram/poller.js";
 import { UpdateDispatcher } from "./telegram/handlers/dispatcher.js";
 import { buildCommands } from "./telegram/handlers/commands.js";
+import { UserRepository } from "./infrastructure/repositories/user.repository.js";
+import { ViewRepository } from "./infrastructure/repositories/view.repository.js";
+import { MenuController } from "./telegram/handlers/ui.js";
+import { RefStore, SessionStore } from "./telegram/handlers/session.js";
 import { createHealthServer } from "./http/health-server.js";
 
 
@@ -46,9 +50,14 @@ export async function createApplication(): Promise<Application> {
   const archiveRepo = new ArchiveRepository(pool);
   const activity = new ActivityLogRepository(pool);
   const settings = new SettingsRepository(pool);
+  const users = new UserRepository(pool);
+  const views = new ViewRepository(pool);
+
+  const sessions = new SessionStore();
+  const refs = new RefStore();
 
   const telegram = new TelegramClient(config.botToken, logger.child("telegram"));
-  const permissions = new PermissionService(admins, config.ownerId);
+  const permissions = new PermissionService(admins, config.ownerId, users);
   const extractor = new ContentExtractionService();
   const archive = new ArchiveService(
     channels,
@@ -62,7 +71,15 @@ export async function createApplication(): Promise<Application> {
     logger.child("archive"),
   );
   const search = new SearchService(files);
-  const statistics = new StatisticsService(channels, files, archiveRepo, hashtags);
+  const statistics = new StatisticsService(
+    channels,
+    files,
+    archiveRepo,
+    hashtags,
+    admins,
+    users,
+    views,
+  );
 
   const commands = buildCommands({
     permissions,
@@ -83,6 +100,26 @@ export async function createApplication(): Promise<Application> {
     telegram,
     logger.child("dispatch"),
   );
+
+  const ui = new MenuController({
+    telegram,
+    permissions,
+    search,
+    statistics,
+    channels,
+    admins,
+    files,
+    hashtags,
+    archive: archiveRepo,
+    activity,
+    settings,
+    views,
+    users,
+    sessions,
+    refs,
+    logger: logger.child("ui"),
+  });
+  dispatcher.setMenuController(ui);
 
   const poller = new UpdatePoller(
     telegram,
