@@ -37,6 +37,9 @@ export interface TelegramMessage {
   video?: TelegramDocument & { duration?: number };
   audio?: TelegramDocument;
   voice?: TelegramDocument;
+  forward_from_chat?: TelegramChat;
+  forward_from_message_id?: number;
+  sender_chat?: TelegramChat;
 }
 
 export interface TelegramUpdate {
