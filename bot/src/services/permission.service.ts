@@ -43,6 +43,7 @@ export class PermissionService {
   constructor(
     private readonly admins: AdminRepository,
     private readonly ownerId: number,
+    private readonly users?: UserRepository,
   ) {}
 
   async resolve(telegramUserId: string): Promise<Actor | null> {
@@ -63,7 +64,18 @@ export class PermissionService {
   }
 
   /** Never returns null: unknown users become read-only students. */
-  async resolveOrStudent(telegramUserId: string): Promise<Actor> {
+  async resolveOrStudent(
+    telegramUserId: string,
+    profile?: { first_name?: string; last_name?: string; username?: string },
+  ): Promise<Actor> {
+    if (this.users) {
+      const fullName = profile
+        ? [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || undefined
+        : undefined;
+      await this.users
+        .touch({ telegramUserId, fullName, username: profile?.username })
+        .catch(() => undefined);
+    }
     const actor = await this.resolve(telegramUserId);
     if (actor) return actor;
     return { telegramUserId, role: "viewer", adminId: null, isOwner: false, isStudent: true };
