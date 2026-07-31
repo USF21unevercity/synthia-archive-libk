@@ -76,8 +76,22 @@ export function buildOwnerKeyboard(): InlineKeyboardMarkup {
   };
 }
 
-export function buildBackToMenuKeyboard(role: Actor["role"]): InlineKeyboardMarkup {
-  const prefix = role === "owner" ? "owner" : role === "admin" ? "admin" : "student";
+export type Panel = "owner" | "admin" | "student";
+
+export function panelFor(actor: Actor): Panel {
+  if (actor.isOwner || actor.role === "owner") return "owner";
+  if (actor.role === "admin" || actor.role === "moderator") return "admin";
+  return "student";
+}
+
+export function keyboardForPanel(panel: Panel): InlineKeyboardMarkup {
+  if (panel === "owner") return buildOwnerKeyboard();
+  if (panel === "admin") return buildAdminKeyboard();
+  return buildStudentKeyboard();
+}
+
+export function buildBackToMenuKeyboard(panel: Panel): InlineKeyboardMarkup {
+  const prefix = panel;
   return {
     inline_keyboard: [[{ text: "🏠 العودة إلى القائمة الرئيسية", callback_data: `menu:${prefix}` }]],
   };
@@ -90,8 +104,8 @@ export async function sendWelcomeMenu(
   fullName?: string,
 ): Promise<void> {
   const name = fullName ? escapeHtml(fullName) : "مرحباً بك";
-  const roleTitle =
-    actor.role === "owner" ? "👑 المالك" : actor.role === "admin" ? "🛡 مشرف" : "🎓 طالب";
+  const panel = panelFor(actor);
+  const roleTitle = panel === "owner" ? "👑 المالك" : panel === "admin" ? "🛡 مشرف" : "🎓 طالب";
 
   const intro = [
     `👋 <b>${name}</b> في <b>منصة الأرشفة العلمية</b>`,
@@ -101,12 +115,7 @@ export async function sendWelcomeMenu(
     "اختر من اللوحة أدناه للوصول السريع دون أوامر نصية:",
   ].join("\n");
 
-  const keyboard =
-    actor.role === "owner"
-      ? buildOwnerKeyboard()
-      : actor.role === "admin"
-        ? buildAdminKeyboard()
-        : buildStudentKeyboard();
+  const keyboard = keyboardForPanel(panel);
 
   await telegram.sendMessage(chatId, intro, { reply_markup: keyboard });
 }
