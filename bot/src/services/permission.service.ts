@@ -1,4 +1,5 @@
 import type { AdminRepository } from "../infrastructure/repositories/admin.repository.js";
+import type { UserRepository } from "../infrastructure/repositories/user.repository.js";
 import type { Admin, AdminRole } from "../domain/models.js";
 import { PermissionError } from "../core/errors.js";
 
