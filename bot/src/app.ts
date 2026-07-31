@@ -18,6 +18,10 @@ import { TelegramClient } from "./telegram/client.js";
 import { UpdatePoller } from "./telegram/poller.js";
 import { UpdateDispatcher } from "./telegram/handlers/dispatcher.js";
 import { buildCommands } from "./telegram/handlers/commands.js";
+import { UserRepository } from "./infrastructure/repositories/user.repository.js";
+import { ViewRepository } from "./infrastructure/repositories/view.repository.js";
+import { MenuController } from "./telegram/handlers/ui.js";
+import { RefStore, SessionStore } from "./telegram/handlers/session.js";
 import { createHealthServer } from "./http/health-server.js";
 
 
