@@ -5,7 +5,7 @@ import type { ArchiveService } from "../../services/archive.service.js";
 import type { ActivityLogRepository } from "../../infrastructure/repositories/activity-log.repository.js";
 import type { TelegramClient, TelegramUpdate } from "../client.js";
 import type { CommandDefinition } from "./types.js";
-import type { MenuController } from "./ui.ts";
+import type { MenuController } from "./ui.js";
 
 /**
  * Module 1 — Telegram Core.
