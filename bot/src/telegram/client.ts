@@ -155,12 +155,39 @@ export class TelegramClient {
     return this.call<TelegramUpdate[]>("getUpdates", {
       offset,
       timeout,
-      allowed_updates: [
-  "message",
-  "channel_post",
-  "edited_channel_post",
-  "callback_query",
-],
+      allowed_updates: ["message", "channel_post", "edited_channel_post", "callback_query"],
+    });
+  }
+
+  editMessageText(
+    chatId: string | number,
+    messageId: number,
+    text: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    return this.call<TelegramMessage | boolean>("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...extra,
+    });
+  }
+
+  answerCallbackQuery(callbackQueryId: string, text?: string, showAlert = false) {
+    return this.call<boolean>("answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+      ...(text ? { text: text.slice(0, 190), show_alert: showAlert } : {}),
+    });
+  }
+
+  getChat(chatId: string | number) {
+    return this.call<TelegramChat>("getChat", { chat_id: chatId });
+  }
+
+  setMyCommands(commands: Array<{ command: string; description: string }>) {
+    return this.call<boolean>("setMyCommands", { commands });
   }
 
   deleteWebhook(dropPendingUpdates = false) {
