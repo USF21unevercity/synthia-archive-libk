@@ -79,13 +79,12 @@ export class UpdateDispatcher {
       return;
     }
 
-    const actor = await this.permissions.resolve(String(message.from.id));
-    if (!actor) {
+    if (actor.isStudent && !["start", "menu", "help", "search"].includes(name)) {
       this.logger.warn("Unauthorized command attempt", {
         userId: message.from.id,
         command: name,
       });
-      await reply("غير مصرح لك باستخدام هذه المنصة.");
+      await reply("غير مصرح لك باستخدام هذا الأمر. أرسل /start لعرض القائمة.");
       return;
     }
 
