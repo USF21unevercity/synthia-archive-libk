@@ -197,6 +197,16 @@ export class TelegramClient {
     return this.call<boolean>("deleteWebhook", { drop_pending_updates: dropPendingUpdates });
   }
 
+  setWebhook(url: string, secretToken: string, extra: Record<string, unknown> = {}) {
+    return this.call<boolean>("setWebhook", {
+      url,
+      secret_token: secretToken,
+      max_connections: 40,
+      allowed_updates: ["message", "channel_post", "edited_channel_post", "callback_query"],
+      ...extra,
+    });
+  }
+
   getWebhookInfo() {
     return this.call<TelegramWebhookInfo>("getWebhookInfo");
   }

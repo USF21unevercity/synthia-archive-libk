@@ -32,6 +32,8 @@ export interface Application {
   poller: UpdatePoller;
   telegram: TelegramClient;
   health: ReturnType<typeof createHealthServer>;
+  /** Public URL Telegram posts updates to (webhook mode only). */
+  webhookUrl: string | null;
 }
 
 /** Composition root: every dependency is constructed and injected here. */
@@ -117,6 +119,10 @@ export async function createApplication(): Promise<Application> {
     users,
     sessions,
     refs,
+    runtime: {
+      mode: config.mode,
+      webhookUrl: config.mode === "webhook" ? `${config.webhookUrl}${config.webhookPath}` : null,
+    },
     logger: logger.child("ui"),
   });
   dispatcher.setMenuController(ui);
@@ -130,6 +136,9 @@ export async function createApplication(): Promise<Application> {
   // Owner always exists and can never be removed.
   await admins.upsert({ telegramUserId: String(config.ownerId), role: "owner" });
 
+  const webhookUrl =
+    config.mode === "webhook" ? `${config.webhookUrl}${config.webhookPath}` : null;
+
   const health = createHealthServer({
     pool,
     telegram,
@@ -137,8 +146,16 @@ export async function createApplication(): Promise<Application> {
     port: config.port,
     startedAt: Date.now(),
     version: "0.1.0",
+    webhook:
+      config.mode === "webhook"
+        ? {
+            path: config.webhookPath,
+            secret: config.webhookSecret,
+            onUpdate: (update) => dispatcher.dispatch(update),
+          }
+        : undefined,
   });
 
-  return { config, logger, pool, poller, telegram, health };
+  return { config, logger, pool, poller, telegram, health, webhookUrl };
 }
 
