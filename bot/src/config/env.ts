@@ -9,6 +9,13 @@ export interface AppConfig {
   archiveChannelId: string;
   logLevel: LogLevel;
   port: number;
+  /** Public HTTPS base URL. When set, the bot runs in webhook mode instead of long polling. */
+  webhookUrl: string;
+  /** Path the Telegram servers will POST updates to. */
+  webhookPath: string;
+  /** Secret token verified on every incoming webhook request. */
+  webhookSecret: string;
+  mode: "webhook" | "polling";
 }
 
 
