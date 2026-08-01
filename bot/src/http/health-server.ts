@@ -1,8 +1,14 @@
-import { createServer, type Server, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Database } from "../infrastructure/db/pool.js";
-import type { TelegramClient } from "../telegram/client.js";
+import type { TelegramClient, TelegramUpdate } from "../telegram/client.js";
 import type { Logger } from "../core/logger.js";
 import { toAppError } from "../core/errors.js";
+
+export interface WebhookOptions {
+  path: string;
+  secret: string;
+  onUpdate: (update: TelegramUpdate) => Promise<void>;
+}
 
 export interface HealthDependencies {
   pool: Database;
@@ -11,6 +17,8 @@ export interface HealthDependencies {
   port: number;
   startedAt: number;
   version: string;
+  /** When provided, the server also accepts Telegram webhook deliveries. */
+  webhook?: WebhookOptions;
 }
 
 interface CheckResult {
