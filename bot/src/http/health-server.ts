@@ -65,13 +65,59 @@ export function createHealthServer(deps: HealthDependencies): {
     res.end(payload);
   };
 
+  const readBody = (req: IncomingMessage): Promise<string> =>
+    new Promise((resolve, reject) => {
+      let raw = "";
+      let size = 0;
+      req.on("data", (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > 2_000_000) {
+          reject(new Error("payload too large"));
+          req.destroy();
+          return;
+        }
+        raw += chunk.toString("utf8");
+      });
+      req.on("end", () => resolve(raw));
+      req.on("error", reject);
+    });
+
   const server = createServer((req, res) => {
     const url = (req.url ?? "/").split("?")[0];
+
+    // ---- Telegram webhook delivery
+    if (deps.webhook && url === deps.webhook.path) {
+      if (req.method !== "POST") {
+        json(res, 405, { error: "method_not_allowed" });
+        return;
+      }
+      const secret = req.headers["x-telegram-bot-api-secret-token"];
+      if (secret !== deps.webhook.secret) {
+        deps.logger.warn("Rejected webhook delivery with invalid secret token");
+        json(res, 401, { error: "unauthorized" });
+        return;
+      }
+      void (async () => {
+        // Always ACK fast: Telegram retries on non-2xx and stalls the queue otherwise.
+        json(res, 200, { ok: true });
+        try {
+          const raw = await readBody(req);
+          const update = JSON.parse(raw) as TelegramUpdate;
+          await deps.webhook!.onUpdate(update);
+        } catch (error) {
+          deps.logger.error("Webhook update handling failed", {
+            error: toAppError(error).message,
+          });
+        }
+      })();
+      return;
+    }
 
     if (req.method !== "GET" && req.method !== "HEAD") {
       json(res, 405, { error: "method_not_allowed" });
       return;
     }
+
 
     if (url === "/health" || url === "/") {
       json(res, 200, {
