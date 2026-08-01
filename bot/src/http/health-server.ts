@@ -98,11 +98,16 @@ export function createHealthServer(deps: HealthDependencies): {
         return;
       }
       void (async () => {
-        // Always ACK fast: Telegram retries on non-2xx and stalls the queue otherwise.
-        json(res, 200, { ok: true });
+        let update: TelegramUpdate | null = null;
         try {
-          const raw = await readBody(req);
-          const update = JSON.parse(raw) as TelegramUpdate;
+          update = JSON.parse(await readBody(req)) as TelegramUpdate;
+        } catch (error) {
+          deps.logger.warn("Malformed webhook payload", { error: toAppError(error).message });
+        }
+        // Always ACK fast: Telegram retries on non-2xx and stalls the update queue.
+        json(res, 200, { ok: true });
+        if (!update) return;
+        try {
           await deps.webhook!.onUpdate(update);
         } catch (error) {
           deps.logger.error("Webhook update handling failed", {
