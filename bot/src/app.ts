@@ -119,6 +119,10 @@ export async function createApplication(): Promise<Application> {
     users,
     sessions,
     refs,
+    runtime: {
+      mode: config.mode,
+      webhookUrl: config.mode === "webhook" ? `${config.webhookUrl}${config.webhookPath}` : null,
+    },
     logger: logger.child("ui"),
   });
   dispatcher.setMenuController(ui);
