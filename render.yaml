@@ -21,13 +21,9 @@ services:
       # Optional: default archive channel id (e.g. -1001234567890)
       - key: ARCHIVE_CHANNEL_ID
         sync: false
-      # Webhook mode: Render injects its own public HTTPS url here automatically.
-      # Leaving it empty makes the bot fall back to long polling.
-      - key: WEBHOOK_URL
-        fromService:
-          type: web
-          name: sci-telegram-bot
-          property: hostport
+      # Webhook mode: Render provides RENDER_EXTERNAL_URL automatically and the bot
+      # uses it as the webhook base url. Set WEBHOOK_URL only to override it
+      # (leaving both empty falls back to long polling).
       - key: WEBHOOK_PATH
         value: /telegram/webhook
       # Optional: override the auto-derived secret token verified on each delivery
