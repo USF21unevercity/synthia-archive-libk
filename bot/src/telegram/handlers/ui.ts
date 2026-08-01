@@ -22,6 +22,13 @@ import type {
 import type { ScientificFile } from "../../domain/models.js";
 import { RefStore, SessionStore } from "./session.js";
 import {
+  SETTING_DEFINITIONS,
+  displayValue,
+  findSetting,
+  isTruthy,
+  validateSetting,
+} from "./settings-catalog.js";
+import {
   buildBackToMenuKeyboard,
   keyboardForPanel,
   panelFor,
@@ -74,6 +81,8 @@ export interface MenuDeps {
   sessions: SessionStore;
   refs: RefStore;
   logger: Logger;
+  /** Runtime transport information shown in the in-bot settings panel. */
+  runtime: { mode: "webhook" | "polling"; webhookUrl: string | null };
 }
 
 /** Button-driven interface for students, admins and the owner. */
@@ -273,6 +282,10 @@ export class MenuController {
       case "owner:settings":
         await this.showSettings(chatId, messageId, actor);
         return;
+      case "owner:webhook":
+      case "admin:webhook":
+        await this.showConnection(chatId, messageId, actor);
+        return;
 
       // ---------- owner
       case "owner:admins":
@@ -338,6 +351,17 @@ export class MenuController {
           buildBackToMenuKeyboard(panel),
         );
         return;
+      case "settog": {
+        this.deps.permissions.assert(actor, "settings:manage");
+        const key = this.deps.refs.get(action);
+        if (!key) throw new ValidationError("انتهت صلاحية هذا الاختيار.");
+        const definition = findSetting(key);
+        if (!definition) throw new ValidationError("إعداد غير معروف.");
+        const current = (await this.deps.settings.get(key)) ?? definition.defaultValue;
+        await this.deps.settings.set(key, isTruthy(current) ? "false" : "true");
+        await this.showSettings(chatId, messageId, actor);
+        return;
+      }
       case "setkey": {
         this.deps.permissions.assert(actor, "settings:manage");
         const key = this.deps.refs.get(action);
@@ -713,20 +737,83 @@ export class MenuController {
     actor: Actor,
   ): Promise<void> {
     this.deps.permissions.assert(actor, "settings:manage");
-    const all = await this.deps.settings.all();
-    const entries = Object.entries(all);
-    const rows: InlineKeyboardButton[][] = entries
-      .slice(0, 20)
-      .map(([k, v]) => [{ text: `⚙️ ${k} = ${v}`.slice(0, 60), callback_data: `setkey:${this.deps.refs.put(k)}` }]);
+    const stored = await this.deps.settings.all();
+
+    const rows: InlineKeyboardButton[][] = SETTING_DEFINITIONS.map((definition) => {
+      const ref = this.deps.refs.put(definition.key);
+      const value = displayValue(definition, stored[definition.key]);
+      return [
+        {
+          text: `${definition.label}: ${value}`.slice(0, 60),
+          callback_data: definition.type === "boolean" ? `settog:${ref}` : `setkey:${ref}`,
+        },
+      ];
+    });
+
+    const custom = Object.keys(stored)
+      .filter((key) => !findSetting(key))
+      .slice(0, 8);
+    for (const key of custom) {
+      rows.push([
+        {
+          text: `🔧 ${key} = ${stored[key]}`.slice(0, 60),
+          callback_data: `setkey:${this.deps.refs.put(key)}`,
+        },
+      ]);
+    }
+
+    rows.push([{ text: "🔌 حالة الاتصال بتيليجرام", callback_data: "owner:webhook" }]);
     rows.push([{ text: "🏠 القائمة الرئيسية", callback_data: `menu:${panelFor(actor)}` }]);
-    await this.render(
-      chatId,
-      messageId,
-      entries.length
-        ? "⚙️ <b>الإعدادات</b>\n\nاضغط على أي إعداد لتعديله."
-        : "⚙️ لا توجد إعدادات مخزنة.\nاستخدم <code>/settings key value</code> لإضافة إعداد.",
-      { inline_keyboard: rows },
-    );
+
+    const lines = [
+      "⚙️ <b>إعدادات البوت</b>",
+      "",
+      ...SETTING_DEFINITIONS.map(
+        (d) => `${d.label} — ${escapeHtml(d.description)}`,
+      ),
+      "",
+      "اضغط على أي إعداد لتبديله أو تعديل قيمته.",
+    ];
+
+    await this.render(chatId, messageId, lines.join("\n"), { inline_keyboard: rows });
+  }
+
+  private async showConnection(
+    chatId: number,
+    messageId: number | undefined,
+    actor: Actor,
+  ): Promise<void> {
+    this.deps.permissions.assert(actor, "settings:manage");
+    const { mode, webhookUrl } = this.deps.runtime;
+    let info: Awaited<ReturnType<TelegramClient["getWebhookInfo"]>> | null = null;
+    try {
+      info = await this.deps.telegram.getWebhookInfo();
+    } catch (error) {
+      this.deps.logger.warn("getWebhookInfo failed", { error: toAppError(error).message });
+    }
+
+    const lines = [
+      "🔌 <b>حالة الاتصال بتيليجرام</b>",
+      "",
+      `الوضع الحالي: <b>${mode === "webhook" ? "Webhook" : "Long Polling"}</b>`,
+      webhookUrl ? `الرابط المُهيّأ: <code>${escapeHtml(webhookUrl)}</code>` : "لا يوجد رابط ويب هوك مُهيّأ.",
+      "",
+      info
+        ? [
+            `المسجَّل لدى تيليجرام: ${info.url ? `<code>${escapeHtml(info.url)}</code>` : "لا شيء"}`,
+            `التحديثات المعلّقة: ${info.pending_update_count}`,
+            info.last_error_message
+              ? `آخر خطأ: ${escapeHtml(info.last_error_message)}`
+              : "لا توجد أخطاء مسجّلة ✅",
+          ].join("\n")
+        : "تعذّر جلب حالة الويب هوك من تيليجرام.",
+      "",
+      mode === "webhook"
+        ? "الويب هوك مفعّل ويعاد تسجيله تلقائياً إذا فُقد."
+        : "لتفعيل الويب هوك أضف المتغير <code>WEBHOOK_URL</code> برابط HTTPS العام ثم أعد التشغيل.",
+    ];
+
+    await this.render(chatId, messageId, lines.join("\n"), buildBackToMenuKeyboard(panelFor(actor)));
   }
 
   private async showAdmins(chatId: number, messageId: number | undefined, actor: Actor): Promise<void> {
@@ -898,6 +985,11 @@ export class MenuController {
     this.deps.permissions.assert(actor, "settings:manage");
     if (!value) throw new ValidationError("القيمة فارغة.");
     if (value.length > 500) throw new ValidationError("القيمة طويلة جداً.");
+    const definition = findSetting(key);
+    if (definition) {
+      const error = validateSetting(definition, value);
+      if (error) throw new ValidationError(error);
+    }
     await this.deps.settings.set(key, value);
     await this.deps.telegram.sendMessage(chatId, "✅ تم حفظ الإعداد.", {
       reply_markup: buildBackToMenuKeyboard(panelFor(actor)),
