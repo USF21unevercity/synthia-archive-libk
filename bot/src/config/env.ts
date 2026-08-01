@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { createHash } from "node:crypto";
 
 export type LogLevel = "error" | "warn" | "info" | "debug";
 
