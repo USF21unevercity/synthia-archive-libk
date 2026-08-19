@@ -13,16 +13,22 @@ export interface QueryRunner {
 
 /** Creates the external PostgreSQL pool. Only DATABASE_URL is used. */
 export function createPool(databaseUrl: string, logger: Logger): Database {
-  const needsSsl = !/localhost|127\.0\.0\.1/.test(databaseUrl);
+  const url = new URL(databaseUrl);
+  const needsSsl = !/^(localhost|127\.0\.0\.1)$/.test(url.hostname);
   const pool = new pg.Pool({
-    connectionString: databaseUrl,
+    host: url.hostname,
+    port: url.port ? Number.parseInt(url.port, 10) : 5432,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ""),
     max: Number.parseInt(process.env.PG_POOL_MAX ?? "10", 10),
     keepAlive: true,
     keepAliveInitialDelayMillis: 10_000,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 15_000,
-    ...(needsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    ...(needsSsl ? { ssl: { rejectUnauthorized: false, servername: url.hostname } } : {}),
   });
+
 
   pool.on("error", (err) => {
     logger.error("Unexpected PostgreSQL pool error", { error: err.message });
